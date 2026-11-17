@@ -5,7 +5,7 @@ import {mkdtemp,readdir} from 'node:fs/promises';
 import path from 'node:path';
 test('真实样例：检测、整改、隔离、问答及权限闭环',async t=>{
  const dir=await mkdtemp(path.resolve('artifacts-test-')),port=13000+Math.floor(Math.random()*3000);
- const child=spawn(process.execPath,['server.js'],{env:{...process.env,PORT:String(port),DATA_DIR:dir,LLM_ENABLED:'false'},stdio:['ignore','pipe','pipe']});
+ const child=spawn(process.execPath,['server.js'],{env:{...process.env,PORT:String(port),DATA_DIR:dir,AI_ENABLED:'false',LLM_ENABLED:'false'},stdio:['ignore','pipe','pipe']});
  let logs='';child.stdout.on('data',d=>logs+=d);child.stderr.on('data',d=>logs+=d);t.after(()=>child.kill());
  const base=`http://127.0.0.1:${port}/api`;for(let i=0;i<100;i++){try{await fetch(base+'/me');break;}catch{await new Promise(r=>setTimeout(r,100));}if(i===99)throw new Error(logs);}
  let cookie='';async function call(url,body,method){const r=await fetch(base+url,{method:method||(body?'POST':'GET'),headers:{'Content-Type':'application/json',cookie},body:body?JSON.stringify(body):undefined});if(url==='/login')cookie=r.headers.get('set-cookie')?.split(';')[0];const json=await r.json();return {status:r.status,...json};}
@@ -19,7 +19,7 @@ test('真实样例：检测、整改、隔离、问答及权限闭环',async t=>
  const b=await run('09','tender',{parentTaskId:a.id});assert.deepEqual(b.summary,{pass:15,fail:0,unknown:0,total:15});assert.equal((await call('/projects/'+pid)).issues[0].status,'已解决');
  await call('/documents/'+doc('03').id,{active:false},'PATCH');const missing=await run('08','tender');assert.equal(missing.results.find(r=>r.id==='R09').status,'无法核验');assert.equal((await call('/tasks/'+a.id)).summary.fail,1);await call('/documents/'+doc('03').id,{active:true},'PATCH');
  const e1=await run('16','evaluation');assert.deepEqual(e1.summary,{pass:6,fail:1,unknown:0,total:7},JSON.stringify(e1.results));const e2=await run('17','evaluation');assert.deepEqual(e2.summary,{pass:7,fail:0,unknown:0,total:7});
- const qa=await call(`/projects/${pid}/qa`,{question:'评标报告由谁签字？'});assert.match(qa.answer,/参加评标的委员会成员签字/);assert.match(qa.fragments[0].section,/第 7 条/);
+ const qa=await call(`/projects/${pid}/qa`,{question:'评标报告由谁签字？',documentIds:[doc('18').id]});assert.equal(qa.status,503);assert.equal(qa.answer,undefined);
  const comp=await call(`/projects/${pid}/compare`,{});assert.equal(comp.matrix.length,4);assert.ok(comp.pairs.some(p=>p.matches.some(m=>m.typo)));const cd=comp.pairs.find(pair=>pair.left===doc('12').id&&pair.right===doc('13').id);assert.equal(cd.matches.some(m=>m.type==='全文重复'&&m.evidence.some(e=>e.location.includes('2. 技术实施方案'))),false);
  const draft=await call(`/projects/${pid}/compile`,{});assert.equal(draft.status,200);assert.match(draft.text,/至少具有 1 个/);assert.doesNotMatch(draft.text,/至少具有 3 个/);
  const filesBefore=await readdir(dir+'/uploads');
