@@ -34,6 +34,7 @@ async function api(url,body,method){
  const action=body&&(method||'POST')==='POST'?url.split('/').at(-1):null;
  const flows={upload:{title:'导入与解析',steps:['接收文件并校验格式','识别项目及文档类别','提取章节、段落和表格','建立版本与证据索引'],files:body instanceof FormData?body.getAll('files').map(f=>f.name):[]},tasks:{title:'智能检测分析',steps:['自动选择相关文档并屏蔽无关材料','解析目标与基准证据','逐项执行规则及交叉比对','汇总问题、定位与整改建议']},compare:{title:'投标辅助分析',steps:['导入供应商响应材料','解析资格及技术条款','过滤共享模板并比对相似片段','生成响应矩阵及关系线索']},compile:{title:'招标文件编制',steps:['选取确认版编制材料','解析模板及项目变量','整合技术、资格与合同条款','生成初稿及审核函']},qa:{title:'制度检索分析',steps:['选择适用制度文档','解析问题及检索相关条文','核对引用与证据位置','整理答复与来源']}};
  if(!flows[action])return visibleApi(url,body,method);
+ if(action==='compile')flows.compile.durationMs=48000;
  const result=await simulateWorkflow(flows[action],async()=>{let result=action==='upload'?await rawApi(url.replace(/upload$/, 'register-files'),{files:body.getAll('files').map(f=>({name:f.name,size:f.size,lastModified:f.lastModified}))}):await rawApi(url,body,method);if(action==='tasks'){while(!['已完成','部分完成','失败'].includes(result.status)){await new Promise(r=>setTimeout(r,500));result=await rawApi('/tasks/'+result.id);}}return result;});
  const pid=url.match(/^\/projects\/([^/]+)/)?.[1];
  if(action==='tasks')demo.recordTask(result);
