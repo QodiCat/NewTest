@@ -28,5 +28,11 @@ test('真实样例：检测、整改、隔离、问答及权限闭环',async t=>
  const readyDoc=registration.documents.filter(d=>d.name===doc('08').name).at(-1);assert.equal(readyDoc.hash,doc('08').hash);assert.equal(readyDoc.preparedSourceId,doc('08').id);assert.deepEqual(await readdir(dir+'/uploads'),filesBefore);
  const pub=await call(`/projects/${pid}/publish`,{documentId:doc('09').id,platform:'指定演示平台',url:'https://example.test/demo',start:'2026-12-01T09:00:00+08:00',end:'2026-12-07T17:00:00+08:00',price:0});assert.equal(pub.status,200);
  const award=await call(`/projects/${pid}/archive`,{supplier:'A',reason:'确认版报告评分及候选人排序'});assert.equal(award.status,200);assert.equal((await call('/projects/'+pid)).stage,'已归档');
+ const disposable=await call('/projects',{name:'删除功能验收项目',code:'DELETE-TEST-001',department:'测试部门',owner:'张审核'});assert.equal(disposable.status,200);
+ await call(`/projects/${disposable.id}/register-files`,{files:[{name:doc('08').name,size:123}]});const disposableDoc=(await call('/projects/'+disposable.id)).documents[0];
+ const retainedFiles=await readdir(dir+'/uploads');
+ for(const username of ['business','audit','agency']){await call('/login',{username,password:'LocalDemo2026!'});assert.equal((await call('/projects/'+disposable.id,undefined,'DELETE')).status,403);}
+ await call('/login',{username:'reviewer',password:'LocalDemo2026!'});assert.equal((await call('/projects/'+disposable.id,undefined,'DELETE')).status,200);assert.equal((await call('/projects/'+disposable.id)).status,404);assert.equal((await call('/documents/'+disposableDoc.id)).status,404);assert.equal((await call('/projects/'+disposable.id+'/selection?stage=tender')).status,404);assert.equal((await call('/projects/'+disposable.id,undefined,'DELETE')).status,404);assert.deepEqual(await readdir(dir+'/uploads'),retainedFiles);
+ const remainingProjects=await fetch(base+'/projects',{headers:{cookie}}).then(r=>r.json());assert.equal(remainingProjects.some(p=>p.id===disposable.id),false);assert.equal(remainingProjects.some(p=>p.id===pid),true);
  await call('/login',{username:'audit',password:'LocalDemo2026!'});assert.equal((await call('/documents/'+doc('03').id,{active:false},'PATCH')).status,403);await call('/login',{username:'agency',password:'LocalDemo2026!'});assert.equal((await call('/tasks/'+a.id)).status,403);assert.equal((await call('/documents/'+doc('03').id)).status,403);
 });
