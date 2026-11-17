@@ -65,6 +65,23 @@ app.get('/api/projects',(req,res)=>res.json(list('project').filter(p=>p.members.
 app.post('/api/projects',(req,res)=>{roles(req,['admin','business','reviewer']);const {name,code,department,owner}=req.body;if(!name?.trim()||!code?.trim())throw fail(400,'项目名称及编号必填');if(list('project').some(p=>p.code===code))throw fail(409,'项目编号重复');const p=put('project',{id:id(),name,code,department,owner,stage:'草稿',created:now(),members:[req.user.id,'admin','reviewer','audit','agency']});audit(req.user,p.id,'新建项目',{code,name});res.json(p);});
 app.get('/api/projects/:pid',(req,res)=>{const p=project(req,req.params.pid);res.json({...p,documents:list('document').filter(d=>d.projectId===p.id&&canRead(req,d)).map(({file,fragments,...d})=>({...d,fragmentCount:fragments.length})),tasks:req.user.role==='agency'?[]:list('task').filter(t=>t.projectId===p.id).map(({selection,results,...t})=>t),issues:list('issue').filter(i=>i.projectId===p.id&&(req.user.role!=='agency'||i.notificationId)),notifications:list('notification').filter(n=>n.projectId===p.id)});});
 const upload=multer({dest:path.join(DATA,'uploads'),limits:{fileSize:40*1024*1024,files:10}});
+// Presentation uploads register metadata and reuse prepared sample snapshots only.
+// No bytes from the selected local files are read, uploaded or parsed.
+app.post('/api/projects/:pid/register-files',(req,res)=>{
+ const p=project(req,req.params.pid);roles(req,['reviewer','business','admin','agency']);
+ if(!Array.isArray(req.body.files)||!req.body.files.length||req.body.files.length>50)throw fail(400,'请选择 1–50 份文档');
+ const sources=list('document').filter(d=>d.projectId===sampleProject&&!d.preparedSourceId);
+ const registered=[];
+ for(const file of req.body.files){
+  if(typeof file.name!=='string'||file.name.length>240||! /\.(docx|pdf|txt|md)$/i.test(file.name))throw fail(400,'文件名或格式无效');
+  const source=sources.find(d=>d.name===file.name),kind=source?.kind||classify(file.name);
+  const doc={...(source||{}),id:id(),projectId:p.id,name:file.name,kind,file:source?.file||null,created:now(),uploadedBy:req.user.id,version:list('document').filter(d=>d.projectId===p.id&&d.kind===kind).length+1,active:true,confirmed:source?.confirmed||false,fragments:source?.fragments||[],hash:source?.hash||null,quality:source?'已就绪':'已接收',parserVersion:source?.parserVersion||'metadata-only',pageNote:source?.pageNote||'暂无可用预览',preparedSourceId:source?.id||'metadata-only',originalSize:Number(file.size)||0};
+  put('document',doc);registered.push(doc);
+  if(source&&['tender_rules','evaluation_rules'].includes(kind))put('ruleset',{id:id(),projectId:p.id,stage:kind==='tender_rules'?'tender':'evaluation',version:now(),created:now(),sourceId:doc.id,rules:extractRules(source)});
+  audit(req.user,p.id,'登记文件',{documentId:doc.id,name:doc.name,size:doc.originalSize});
+ }
+ res.json(registered.map(({file,fragments,...d})=>({...d,fragmentCount:fragments.length})));
+});
 app.post('/api/projects/:pid/upload',upload.array('files',10),async(req,res)=>{const p=project(req,req.params.pid);roles(req,['reviewer','business','admin','agency']);if(p.stage==='已归档')throw fail(409,'归档项目不可修改');const result=[];for(const f of req.files||[]){const name=Buffer.from(f.originalname,'latin1').toString('utf8');if(!/\.(docx|pdf|txt|md)$/i.test(name)){await unlink(f.path);result.push({name,error:'仅支持 DOCX／PDF／TXT／MD'});continue;}try{result.push(await importDoc(f.path,name,p.id,req.user,{confirmed:req.user.role==='agency'?false:undefined}));}catch(e){await unlink(f.path);result.push({name,error:'解析失败：'+e.message});}}res.json(result.map(({file,...d})=>d));});
 app.get('/api/documents/:did',(req,res)=>{const {file,...d}=document(req,req.params.did);audit(req.user,d.projectId,'预览文档',{documentId:d.id});res.json(d);});
 app.get('/api/documents/:did/download',(req,res)=>{const d=document(req,req.params.did);audit(req.user,d.projectId,'下载原件',{documentId:d.id});res.download(d.file,d.name);});

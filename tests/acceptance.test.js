@@ -22,6 +22,10 @@ test('真实样例：检测、整改、隔离、问答及权限闭环',async t=>
  const qa=await call(`/projects/${pid}/qa`,{question:'评标报告由谁签字？'});assert.match(qa.answer,/参加评标的委员会成员签字/);assert.match(qa.fragments[0].section,/第 7 条/);
  const comp=await call(`/projects/${pid}/compare`,{});assert.equal(comp.matrix.length,4);assert.ok(comp.pairs.some(p=>p.matches.some(m=>m.typo)));const cd=comp.pairs.find(pair=>pair.left===doc('12').id&&pair.right===doc('13').id);assert.equal(cd.matches.some(m=>m.type==='全文重复'&&m.evidence.some(e=>e.location.includes('2. 技术实施方案'))),false);
  const draft=await call(`/projects/${pid}/compile`,{});assert.equal(draft.status,200);assert.match(draft.text,/至少具有 1 个/);assert.doesNotMatch(draft.text,/至少具有 3 个/);
+ const filesBefore=await readdir(dir+'/uploads');
+ const registered=await call(`/projects/${pid}/register-files`,{files:[{name:'不读取内容.docx',size:123},{name:doc('08').name,size:456}]});assert.equal(registered.status,200);
+ const registration=await call('/projects/'+pid);const unknownDoc=registration.documents.find(d=>d.name==='不读取内容.docx');assert.equal(unknownDoc.parserVersion,'metadata-only');assert.equal(unknownDoc.fragmentCount,0);assert.equal(unknownDoc.originalSize,123);
+ const readyDoc=registration.documents.filter(d=>d.name===doc('08').name).at(-1);assert.equal(readyDoc.hash,doc('08').hash);assert.equal(readyDoc.preparedSourceId,doc('08').id);assert.deepEqual(await readdir(dir+'/uploads'),filesBefore);
  const pub=await call(`/projects/${pid}/publish`,{documentId:doc('09').id,platform:'指定演示平台',url:'https://example.test/demo',start:'2026-12-01T09:00:00+08:00',end:'2026-12-07T17:00:00+08:00',price:0});assert.equal(pub.status,200);
  const award=await call(`/projects/${pid}/archive`,{supplier:'A',reason:'确认版报告评分及候选人排序'});assert.equal(award.status,200);assert.equal((await call('/projects/'+pid)).stage,'已归档');
  await call('/login',{username:'audit',password:'LocalDemo2026!'});assert.equal((await call('/documents/'+doc('03').id,{active:false},'PATCH')).status,403);await call('/login',{username:'agency',password:'LocalDemo2026!'});assert.equal((await call('/tasks/'+a.id)).status,403);assert.equal((await call('/documents/'+doc('03').id)).status,403);
