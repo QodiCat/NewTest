@@ -1,4 +1,5 @@
-﻿import 'dotenv/config';
+﻿import dotenv from 'dotenv';
+dotenv.config({path:fileURLToPath(new URL('.env',import.meta.url)),quiet:true});
 import {readRichDocx,richDocx} from './lib/rich-document.js';
 import express from 'express';
 import multer from 'multer';
@@ -148,7 +149,7 @@ app.post('/api/comparisons/:cid/review',(req,res)=>{roles(req,['reviewer','admin
 app.post('/api/projects/:pid/qa',async(req,res)=>{
  const s=selection(req,req.params.pid,'qa'),question=typeof req.body.question==='string'?req.body.question.trim():'';
  if(!question||question.length>8000)throw fail(400,'请填写问题，长度不超过 8000 字');
- const cfg=modelConfig();if(!cfg.enabled)throw fail(503,'请在 .env 配置 AI_BASE_URL、AI_MODEL 和所需的 AI_API_KEY，然后重启服务');
+ const cfg=modelConfig();if(!cfg.enabled)throw fail(503,'请在 .env 配置 AI_BASE_URL、AI_MODEL 和所需的 AI_API_KEY，保存后即可提问');
  if(!cfg.baseUrl||!cfg.model)throw fail(503,'请先在 .env 配置 AI_BASE_URL 和 AI_MODEL');
  const ids=Array.isArray(req.body.documentIds)?req.body.documentIds:[];
  const terms=question.replace(/[？?，。\s]/g,''),words=[...new Set(Array.from({length:Math.max(0,terms.length-1)},(_,i)=>terms.slice(i,i+2)))];
